@@ -57,29 +57,22 @@ int main() {
 		else
 			continue;
 		for(;;) {
-			printf("Looking for requested command in %s\n", pathdir);
 			d = opendir(pathdir);
 			if (d) {
 				while ((executable = readdir(d)) != NULL) {
 					if(strcmp(executable->d_name, cmd) == 0) {
-						
 						pid_t pid = fork ();
 						if (pid<0) { // fork has failed 
 							perror("fork"); exit(EXIT_FAILURE);
 						}
 						else if (pid == 0) {
-							printf("In child pid = %i\n", getpid());
-							printf("Found command in %s\n", pathdir);
 							strcat(pathdir, "/");
 							strcat(pathdir, cmd);
 							printf("%s\n",pathdir);
 							arglist[0] = pathdir;
 							fflush(stdout);
-							char* const arglist2[] = {"/usr/bin/ls", "-l", "-a", NULL};
 							execv(pathdir, arglist);
-							printf("Uh Oh. Should never be here\n");
 						} else {
-							printf("In parent pid = %i\n", getpid());
 							wait(NULL);
 						}
 					}
