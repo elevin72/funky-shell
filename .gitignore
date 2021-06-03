@@ -53,3 +53,4 @@ dkms.conf
 
 # eli's crap
 compile_flags.txt
+.vscode

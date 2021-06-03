@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <wait.h>
 
 // turn a space string of words into an array of char*, each containing one of the words
 char** listify(const char* _words) {
@@ -11,7 +12,7 @@ char** listify(const char* _words) {
 	char arg[80];
 	strcpy(words, _words);
 	word = strtok_r(words, " ", &word_saveptr);
-	int i = 0;
+	int i = 1; // leave 0th pointer empty for the initial command path
 	for(; word != NULL; ++i) {
 		int size = strlen(word) + 1;
 		list[i] = malloc(size);
@@ -61,13 +62,26 @@ int main() {
 			if (d) {
 				while ((executable = readdir(d)) != NULL) {
 					if(strcmp(executable->d_name, cmd) == 0) {
-						printf("Found command in %s\n", pathdir);
-						/* int pid = fork(); */
-						/* if(pid == 0) { */
-						/* 	execv(strcat(pathdir,cmd), arglist); */
-						/* } else { */
-
-						/* } */
+						
+						pid_t pid = fork ();
+						if (pid<0) { // fork has failed 
+							perror("fork"); exit(EXIT_FAILURE);
+						}
+						else if (pid == 0) {
+							printf("In child pid = %i\n", getpid());
+							printf("Found command in %s\n", pathdir);
+							strcat(pathdir, "/");
+							strcat(pathdir, cmd);
+							printf("%s\n",pathdir);
+							arglist[0] = pathdir;
+							fflush(stdout);
+							char* const arglist2[] = {"/usr/bin/ls", "-l", "-a", NULL};
+							execv(pathdir, arglist);
+							printf("Uh Oh. Should never be here\n");
+						} else {
+							printf("In parent pid = %i\n", getpid());
+							wait(NULL);
+						}
 					}
 				}
 				closedir(d);
