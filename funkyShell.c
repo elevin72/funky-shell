@@ -6,6 +6,7 @@
 #include <wait.h>
 #include <stdbool.h>
 
+
 // turn a space string of words into an array of char*, each containing one of the words
 char** listify(const char* _words, const char* symbol) {
 	char** list = malloc(strlen(_words)); // always overshoot number of commands
@@ -24,6 +25,53 @@ char** listify(const char* _words, const char* symbol) {
 	return list;
 }
 
+// returns a string containing the full path of the executable in cmd
+// returns NULL if not found
+char* findInPath(char* cmd, char* path) {
+	char dirInPath[100]; // individual directories in path
+	char* fixedPath; // pointer to value of path as stored in the system
+	char* pathTokenPtr; // pointer to section of path. Used when extracting directories from the path
+	char* path_saveptr; // for internal use of strtok_r. Use when tokenizing path
+	char* fullExe; // pointer to heap memory containing the full path of cmd
+	DIR *d; // A directory stream??
+	struct dirent *executableFile; // individual files in dir
+	pathTokenPtr = strtok_r(path, ":", &path_saveptr);
+	while (pathTokenPtr && strcpy(dirInPath, pathTokenPtr)) { // loop over dirs in path
+		d = opendir(dirInPath);
+		if (d) {
+			while ((executableFile = readdir(d))) { // loop over executables in directory
+				if(strcmp(executableFile->d_name, cmd) == 0) {
+					strcat(dirInPath, "/");
+					strcat(dirInPath, cmd);
+					fullExe = malloc(strlen(dirInPath) * sizeof(char));
+					strcpy(fullExe, dirInPath);
+					closedir(d);
+					return fullExe;
+				}
+			}
+		}
+		pathTokenPtr = strtok_r(NULL, ":", &path_saveptr); // get next dir in path
+		closedir(d);
+	}
+	return NULL;
+}
+
+// fork and execv. Child dies before this function returns
+void execute(char* fullExe, char** arglist) {
+	pid_t pid = fork ();
+	if (pid<0) { // fork has failed 
+		perror("fork"); exit(EXIT_FAILURE);
+	}
+	else if (pid == 0) {
+		printf("%s\n",fullExe);
+		fflush(stdout);
+		arglist[0] = fullExe;
+		execv(fullExe, arglist); // we'll never come back from this call
+	} else {
+		wait(NULL); // wait for child to die
+	}
+}
+
 int main() {
 	char buf[1000]; // buffer which stores the entire command
 	char** arglist; // list of args to command
@@ -32,14 +80,8 @@ int main() {
 	int bufsize; // The size of buf
 
 	char path[1000]; // buffer which stores the path
-	char pathdir[100]; // individual directories in path
 	char* fixedPath; // pointer to value of path as stored in the system
-	char* pathTokenPtr; // pointer to section of path. Used when extracting directories from the path
-	char* path_saveptr; // for internal use of strtok_r. Use when tokenizing path
-
-	DIR *d; // A directory stream??
-	bool foundprogram = false;
-	struct dirent *executable; // individual files in dir
+	char* fullExe;
 
 	//main loop
 	for(;;) {
@@ -48,51 +90,12 @@ int main() {
 		bufsize = read(0, buf, 999);
 		buf[bufsize-1] = 0;
 		// Get first word in command and store it in cmd
-		// Subsequent words will be retrieved with strtok_r(NULL, " ", $cmd_saveptr);
-		cmd = strtok_r(buf, " ", &cmd_saveptr); // _r important
-		// turn buf into an array of char* each one an argument
+		cmd = strtok_r(buf, " ", &cmd_saveptr); // is _r necessary?
 		arglist = listify(cmd_saveptr, " ");
-		// fixedPath shall not be changed
-		fixedPath = getenv("PATH");
+		fixedPath = getenv("PATH"); // fixedPath shall not be changed
 		strcpy(path, fixedPath);
-		// subsequent call will be strtok_r(NULL, ":", &path_saveptr);
-		pathTokenPtr = strtok_r(path, ":", &path_saveptr);
-		fflush(stdout);
-		if(pathTokenPtr != NULL)
-			strcpy(pathdir,pathTokenPtr);
-		else
-			continue;
-		foundprogram = false;
-		for(;;) {
-			d = opendir(pathdir);
-			if (d) {
-				while (NULL != (executable = readdir(d))) { // get all names of executables in directory
-					if(strcmp(executable->d_name, cmd) == 0) {
-						pid_t pid = fork ();
-						if (pid<0) { // fork has failed 
-							perror("fork"); exit(EXIT_FAILURE);
-						}
-						else if (pid == 0) {
-							strcat(pathdir, "/");
-							strcat(pathdir, cmd);
-							printf("%s\n",pathdir);
-							arglist[0] = pathdir;
-							fflush(stdout);
-							execv(pathdir, arglist); // we'll never come back from this call
-						} else {
-							foundprogram = true;
-							wait(NULL); // wait for child to die
-						}
-					}
-				}
-				closedir(d);
-			}
-			pathTokenPtr = strtok_r(NULL, ":", &path_saveptr);
-			if(pathTokenPtr != NULL) // if more directories in path
-				strcpy(pathdir,pathTokenPtr); // copy next directory into pathdir
-			else
-				break;
-		}
+		fullExe = findInPath(cmd, path);
+		execute(fullExe, arglist);
 	}
 	return 0;
 }
