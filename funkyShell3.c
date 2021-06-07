@@ -39,6 +39,7 @@ char** listify(const char* str, const char* symbol, int* n) {
 	return returnList;
 }
 
+// free a list created by listified()
 void freeListified(char** list) {
 	for(int i = 0; list[i] != NULL; ++i) {
 		free(list[i]);
@@ -98,6 +99,7 @@ char** formatCommand(const char* command) {
 	return commandList;
 }
 
+// takes a string and returns an array of commands, each one representing one of the pipes in the entire command
 struct command* formatCommands(const char* command) {
 	int numPipes;
 	struct command cur;
@@ -113,6 +115,7 @@ struct command* formatCommands(const char* command) {
 	return commandList;
 }
 
+// delete the list created by formatCommand()
 void freeCommands(struct command* list) {
 	for(int i = 0; list[i].argv != NULL; ++i) {
 		freeListified(list[i].argv);
@@ -120,6 +123,7 @@ void freeCommands(struct command* list) {
 	free(list);
 }
 
+// fork and execv, using the specified fd's for in and out
 void spawnProcess(int in, int out, const struct command* cmd) {
 	pid_t pid;
 	if ((pid = fork ()) == 0) {
@@ -132,7 +136,7 @@ void spawnProcess(int in, int out, const struct command* cmd) {
 			close(out);
 		}
 		execv(cmd->argv[0], cmd->argv);
-		fprintf(stderr, "WHOOPSIES");
+		fprintf(stderr, "WHOOPSIES"); // should never be here
 	}
 	wait(NULL);
 }
@@ -140,8 +144,7 @@ void spawnProcess(int in, int out, const struct command* cmd) {
 int main () {
 	char buffer[1000]; // buffer which stores the entire command
 	int bufferSize; // The size of buf
-	char** commands; // list of commands
-	int in, fd[2], pipedCommands;
+	int in, fd[2];
 
 	//main loop
 	for(;;) {
@@ -150,12 +153,16 @@ int main () {
 		bufferSize = read(0, buffer, 999);
 		buffer[bufferSize-1] = 0;
 		struct command* commands = formatCommands(buffer);
+		if(commands[0].argv == NULL) {
+			printf("\n");
+			continue;
+		}
 		int in = fileno(stdin);
 		int i;
 		for(i = 0; commands[i+1].argv != NULL; ++i) {
 			pipe(fd);
 			spawnProcess(in, fd[1], commands + i);
-			close(fd[1]); // necessary?
+			close(fd[1]);
 			in = fd[0];
 		}
 		spawnProcess(in, 1, commands + i);

@@ -6,6 +6,15 @@
 #include <wait.h>
 #include <stdbool.h>
 
+// some globals... Bad Eli
+int PIPE = 1;
+int DONT_PIPE = 0;
+
+struct command {
+	char** argv;
+};
+
+
 
 // turn a space string of words into an array of char*, each containing one of the words
 char** listify(const char* _words, const char* symbol) {
@@ -14,7 +23,7 @@ char** listify(const char* _words, const char* symbol) {
 	char arg[80];
 	strcpy(words, _words);
 	word = strtok_r(words, symbol, &word_saveptr);
-	int i = 1; // leave 0th pointer empty for the initial command path
+	int i = 0;
 	for(; word != NULL; ++i) {
 		int size = strlen(word) + 1;
 		list[i] = malloc(size);
@@ -27,14 +36,17 @@ char** listify(const char* _words, const char* symbol) {
 
 // returns a string containing the full path of the executable in cmd
 // returns NULL if not found
-char* findInPath(char* cmd, char* path) {
+char* findInPath(char* cmd) {
 	char dirInPath[100]; // individual directories in path
+	char* path;
 	char* fixedPath; // pointer to value of path as stored in the system
 	char* pathTokenPtr; // pointer to section of path. Used when extracting directories from the path
 	char* path_saveptr; // for internal use of strtok_r. Use when tokenizing path
 	char* fullExe; // pointer to heap memory containing the full path of cmd
 	DIR *d; // A directory stream??
 	struct dirent *executableFile; // individual files in dir
+	fixedPath = getenv("PATH");
+	strcpy(path, fixedPath);
 	pathTokenPtr = strtok_r(path, ":", &path_saveptr);
 	while (pathTokenPtr && strcpy(dirInPath, pathTokenPtr)) { // loop over dirs in path
 		d = opendir(dirInPath);
@@ -56,52 +68,106 @@ char* findInPath(char* cmd, char* path) {
 	return NULL;
 }
 
+struct command* formatCommands(char* commands) {
+	struct command* cmd; 
+	char** commandsList = listify(commands, "|");
+	for(int i = 0; commandsList[i] != NULL; ++i) {
+		
+
+	}
+	char* cmd = findInPath(res[0]);
+	res[0] = realloc(res[0], strlen(cmd));
+	strcpy(res[0], cmd);
+	return res;
+}
+
 // fork and execv. Child dies before this function returns
-void execute(char* fullExe, char** arglist) {
+void forkAndExecv(char** arglist, int pipeMaybe) {
 	pid_t pid = fork ();
 	if (pid<0) { // fork has failed 
 		perror("fork"); exit(EXIT_FAILURE);
 	}
 	else if (pid == 0) {
-		printf("%s\n",fullExe);
-		fflush(stdout);
-		arglist[0] = fullExe;
-		execv(fullExe, arglist); // we'll never come back from this call
+		execv(arglist[0], arglist); // we'll never come back from this call
 	} else {
 		wait(NULL); // wait for child to die
 	}
 }
 
-int main() {
-	char buf[1000]; // buffer which stores the entire command
-	char** arglist; // list of args to command
-    char* cmd_saveptr; // for internal use of strtok_r. Use when tokenizing buf
-    char* cmd; // The first word in buf
-	int bufsize; // The size of buf
+int spawnProcess(int in, int out, char** cmd) {
+	pid_t pid;
 
-	char path[1000]; // buffer which stores the path
-	char* fixedPath; // pointer to value of path as stored in the system
-	char* fullExe;
+	if ((pid = fork ()) == 0) {
+		if (in != 0) {
+			dup2(in, 0);
+			close(in);
+		}
+		if (out != 1) {
+			dup2(out, 1);
+			close(out);
+		}
+		return execv(cmd[0], cmd);
+	}
+	return pid;
+}
+
+// cleanup memory after each call. 
+// Inefficient, but I never managed memory in C before, so it's fun
+void cleanup(char** list) {
+	for(int i = 0; list[i] != NULL; ++i) {
+		free(list[i]);
+	}
+	free(list);
+}
+
+int main() {
+	char buffer[1000]; // buffer which stores the entire command
+	int bufferSize; // The size of buf
+	char** arglist; // list of args to command
+    char* command_saveptr; // for internal use of strtok_r. Use when tokenizing buf
+    char** command; // The first word in buf
+	char** commands;
+	int n, trash, in, fd[2];
+
+	char* partOfPipe;
+	char* nextPartOfPipe;
+	char* pipe_saveptr;
+
 
 	//main loop
 	for(;;) {
 		printf(" >");
 		fflush(stdout);
-		bufsize = read(0, buf, 999);
-		buf[bufsize-1] = 0;
-		// Get first word in command and store it in cmd
-		cmd = strtok_r(buf, " ", &cmd_saveptr); // is _r necessary?
-		arglist = listify(cmd_saveptr, " ");
-		fixedPath = getenv("PATH"); // fixedPath shall not be changed
-		strcpy(path, fixedPath);
-		fullExe = findInPath(cmd, path);
-		execute(fullExe, arglist);
+		bufferSize = read(0, buffer, 999);
+		buffer[bufferSize-1] = 0;
+		commands = formatCommands(buffer, "|", &n);
+		in = fileno(stdin); // first input should be from stdin
+		for(int i = 0; i < n - 1; ++i) {
+			pipe(fd);
+			command = formatCommand(commands[i]);
+			spawnProcess(in, fd[1], command);
+			close(fd[1]);
+			in = fd[0];
+
+		}
+		if (in != 0) {
+			dup2(in, fileno(stdin));
+		}
+		execv()
+
+		forkAndExecv(arglist);
+		cleanup(arglist);
 	}
 	return 0;
 }
 
 
-// Idea for piping:
-// Have yet another strtok_r running, this time breaking on '|' symbol
-// For each token, run this main execution loop.
-// Somehow get the output of of execv (??) and then pipe to the next thing??
+/*
+ * In main loop:
+ * 1. Get all sections of pipe
+ * 2. for each piped section
+ *		format the commnd for execv
+ *		call spawnProcess
+ *		cleanup command
+ *		
+ */

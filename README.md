@@ -1,1 +1,1 @@
-# funky-shell
+ell
