@@ -50,8 +50,7 @@ void freeListified(char** list) {
 // returns a string containing the full path of the executable in cmd
 // returns NULL if not found
 char* findInPath(const char* cmd) {
-	char dirInPath[100]; // individual directories in path
-	char localcmd[100];
+	char dirInPath[100]; // individual directory in the path
 	char path[1000];
 	char* fixedPath; // pointer to value of path as stored in the system
 	char* pathTokenPtr; // pointer to section of path. Used when extracting directories from the path
@@ -62,7 +61,6 @@ char* findInPath(const char* cmd) {
 
 	fixedPath = getenv("PATH");
 	strcpy(path, fixedPath); // never edit the fixedPath
-	strcpy(localcmd, cmd); // never edit the parameter pointer
 	pathTokenPtr = strtok_r(path, ":", &path_saveptr);
 	while (pathTokenPtr && strcpy(dirInPath, pathTokenPtr)) { // loop over dirs in path
 		d = opendir(dirInPath);
@@ -159,14 +157,14 @@ int main () {
 		}
 		int in = fileno(stdin);
 		int i;
-		for(i = 0; commands[i+1].argv != NULL; ++i) {
+		for(i = 0; commands[i+1].argv != NULL; ++i) { // do all the pipes
 			pipe(fd);
 			spawnProcess(in, fd[1], commands + i);
 			close(fd[1]);
-			in = fd[0];
+			in = fd[0]; // save where we outputted this previous command
 		}
-		spawnProcess(in, 1, commands + i);
-		freeCommands(commands);
+		spawnProcess(in, 1, commands + i); //output final command to stdout
+		freeCommands(commands); // cleanup
 	}
 }
 
