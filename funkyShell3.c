@@ -9,21 +9,13 @@ struct command {
 	char **argv;
 };
 
-int spawn_proc(int in, int out, struct command *cmd) {
-	pid_t pid;
-	if ((pid = fork ()) == 0) {
-		if (in != 0) {
-			dup2 (in, 0);
-			close (in);
-		}
-		if (out != 1) {
-			dup2 (out, 1);
-			close (out);
-		}
-		return execvp (cmd->argv [0], (char * const *)cmd->argv);
-	}
-	return pid;
-}
+char** listify(const char* str, const char* symbol, int* n);
+void freeListified(char** list);
+char* findInPath(const char* cmd);
+char** formatCommand(const char* command);
+struct command* formatCommands(const char* command);
+void freeCommands(struct command* list);
+void spawnProcess(int in, int out, const struct command *cmd);
 
 // turn a space string of words into an array of char*, each containing one of the words
 char** listify(const char* str, const char* symbol, int* n) {
@@ -128,15 +120,7 @@ void freeCommands(struct command* list) {
 	free(list);
 }
 
-void printErrCommand(struct command* cmd) {
-	fprintf(stderr, "Command that failed:\n");
-	for(int i = 0; cmd->argv[i] != NULL; ++i) {
-		fprintf(stderr,"%s", cmd->argv[i]);
-	}
-	fprintf(stderr,"\n");
-}
-
-void spawnProcess(int in, int out, struct command* cmd) {
+void spawnProcess(int in, int out, const struct command* cmd) {
 	pid_t pid;
 	if ((pid = fork ()) == 0) {
 		if (in != 0) {
@@ -168,8 +152,6 @@ int main () {
 		struct command* commands = formatCommands(buffer);
 		int in = fileno(stdin);
 		int i;
-		// fd[0]: read end
-		// fd[1]: write end
 		for(i = 0; commands[i+1].argv != NULL; ++i) {
 			pipe(fd);
 			spawnProcess(in, fd[1], commands + i);
